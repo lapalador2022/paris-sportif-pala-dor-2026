@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Paris Pelote</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      max-width: 1000px;
+      margin: auto;
+    }
+    h1 { text-align: center; }
+    h2 { margin-top: 30px; }
+
+    label { font-weight: bold; display: block; margin-top: 10px; }
+    input, button {
+      padding: 8px 12px;
+      margin-top: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    button {
+      background: #008CFF;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover { background: #006FCC; }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: white;
+      margin-left: 10px;
+    }
+    .open { background: #00b894; }
+    .closed { background: #d63031; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #eee;
+    }
+    tbody tr:nth-child(even) {
+      background: #fafafa;
+    }
+
+    #timerDisplay {
+      font-weight: bold;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Admin – Paris Pelote</h1>
+
+  <!-- ÉTAT GLOBAL -->
+  <h2>État des paris</h2>
+  <div class="row">
+    <div>
+      <strong>Partie actuelle :</strong>
+      <span id="partieActuelle">–</span>
+    </div>
+    <div>
+      <strong>Statut :</strong>
+      <span id="statutParis" class="badge closed">Inconnu</span>
+    </div>
+    <div>
+      <strong>Fermeture dans :</strong>
+      <span id="timerDisplay">–</span>
+    </div>
+  </div>
+
+  <!-- GESTION PARTIE + TIMER -->
+  <h2>Gestion de la partie & du timer</h2>
+  <div class="row">
+    <div>
+      <label>Nom de la partie</label>
+      <input type="text" id="inputPartie" placeholder="Ex : Equipe1 - Equipe2">
+    </div>
+    <div>
+      <button id="btnSetPartie">Mettre à jour la partie</button>
+      <button id="btnNewPartie" style="background:#e67e22;">Nouvelle partie (vider les paris)</button>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:15px;">
+    <div>
+      <label>Durée avant fermeture (minutes)</label>
+      <input type="number" id="inputMinutes" min="1" value="10" style="width:80px;">
+    </div>
+    <div>
+      <button id="btnStartTimer">Démarrer le timer & ouvrir les paris</button>
+      <button id="btnCloseNow" style="background:#d63031;">Fermer les paris maintenant</button>
+    </div>
+  </div>
+
+  <!-- LISTE PARTICIPANTS -->
+  <h2>Participants</h2>
+  <button id="btnExport">Exporter en CSV</button>
+  <span id="nbParticipants" style="margin-left:10px;"></span>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Prénom</th>
+        <th>Téléphone</th>
+        <th>Score</th>
+        <th>Partie</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody id="tbodyParticipants"></tbody>
+  </table>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { 
+      getFirestore, doc, onSnapshot, updateDoc, setDoc, getDoc 
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyChlD3Lx2CBTWl88Tjbz-693f_s6jA4eys",
+      authDomain: "paris-pala-d-or.firebaseapp.com",
+      projectId: "paris-pala-d-or",
+      storageBucket: "paris-pala-d-or.firebasestorage.app",
+      messagingSenderId: "673652668583",
+      appId: "1:673652668583:web:94d8879777b53561b78382",
+      measurementId: "G-PYN7V7XVWC"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const docRef = doc(db, "paris", "participants");
+
+    let currentData = { liste: [], partieCourante: "", parisOuverts: false, fermetureTimestamp: null };
+    let timerInterval = null;
+
+    // --- UTILITAIRE TIMER ---
+    function updateTimerDisplay() {
+      const el = document.getElementById("timerDisplay");
+      if (!currentData.fermetureTimestamp || !currentData.parisOuverts) {
+        el.textContent = "–";
+        return;
+      }
+      const now = Date.now();
+      const diff = currentData.fermetureTimestamp - now;
+      if (diff <= 0) {
+        el.textContent = "Fermés";
+        return;
+      }
+      const minutes = Math.floor(diff / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      el.textContent = `${minutes}m ${seconds}s`;
+    }
+
+    function startLocalTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimerDisplay, 1000);
+      updateTimerDisplay();
+    }
+
+    // --- ÉCOUTE EN TEMPS RÉEL ---
+    onSnapshot(docRef, (docSnap) => {
+      if (!docSnap.exists()) {
+        // Si le doc n'existe pas encore, on l'initialise
+        setDoc(docRef, {
+          liste: [],
+          partieCourante: "",
+          parisOuverts: false,
+          fermetureTimestamp: null
+        });
+        return;
+      }
+
+      const data = docSnap.data();
+      currentData = {
+        liste: data.liste || [],
+        partieCourante: data.partieCourante || "",
+        parisOuverts: data.parisOuverts ?? false,
+        fermetureTimestamp: data.fermetureTimestamp || null
+      };
+
+      // Partie actuelle
+      document.getElementById("partieActuelle").textContent = currentData.partieCourante || "Non définie";
+      document.getElementById("inputPartie").value = currentData.partieCourante || "";
+
+      // Statut paris
+      const statutEl = document.getElementById("statutParis");
+      if (currentData.parisOuverts) {
+        statutEl.textContent = "Ouverts";
+        statutEl.className = "badge open";
+      } else {
+        statutEl.textContent = "Fermés";
+        statutEl.className = "badge closed";
+      }
+
+      // Timer
+      if (currentData.fermetureTimestamp && currentData.parisOuverts) {
+        startLocalTimer();
+      } else {
+        document.getElementById("timerDisplay").textContent = "–";
+      }
+
+      // Tableau participants
+      const tbody = document.getElementById("tbodyParticipants");
+      tbody.innerHTML = "";
+      currentData.liste.forEach(p => {
+        const tr = document.createElement("tr");
+        const d = new Date(p.timestamp || 0);
+        const dateStr = isNaN(d.getTime()) ? "" : d.toLocaleString("fr-FR");
+
+        tr.innerHTML = `
+          <td>${p.nom || ""}</td>
+          <td>${p.prenom || ""}</td>
+          <td>${p.telephone || ""}</td>
+          <td>${p.score || ""}</td>
+          <td>${p.partie || ""}</td>
+          <td>${dateStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("nbParticipants").textContent =
+        currentData.liste.length + " participant(s)";
+    });
+
+    // --- BOUTONS ADMIN ---
+
+    // Mettre à jour le nom de la partie
+    document.getElementById("btnSetPartie").addEventListener("click", async () => {
+      const partie = document.getElementById("inputPartie").value.trim();
+      if (!partie) {
+        alert("Merci de saisir un nom de partie.");
+        return;
+      }
+      await updateDoc(docRef, { partieCourante: partie });
+      alert("Partie mise à jour.");
+    });
+
+    // Nouvelle partie : vide les paris + met à jour la partie
+    document.getElementById("btnNewPartie").addEventListener("click", async () => {
+      const partie = document.getElementById("inputPartie").value.trim();
+      if (!partie) {
+        alert("Merci de saisir un nom de partie.");
+        return;
+      }
+      if (!confirm("Confirmer : vider tous les paris et démarrer une nouvelle partie ?")) return;
+
+      await setDoc(docRef, {
+        liste: [],
+        partieCourante: partie,
+        parisOuverts: false,
+        fermetureTimestamp: null
+      });
+      alert("Nouvelle partie créée, paris actuellement fermés.");
+    });
+
+    // Démarrer le timer & ouvrir les paris
+    document.getElementById("btnStartTimer").addEventListener("click", async () => {
+      const minutes = parseInt(document.getElementById("inputMinutes").value, 10);
+      if (isNaN(minutes) || minutes <= 0) {
+        alert("Merci de saisir un nombre de minutes valide.");
+        return;
+      }
+      const fermetureTimestamp = Date.now() + minutes * 60000;
+      await updateDoc(docRef, {
+        parisOuverts: true,
+        fermetureTimestamp
+      });
+      alert("Timer démarré et paris ouverts.");
+    });
+
+    // Fermer les paris maintenant
+    document.getElementById("btnCloseNow").addEventListener("click", async () => {
+      await updateDoc(docRef, {
+        parisOuverts: false
+      });
+      alert("Paris fermés.");
+    });
+
+    // Export CSV
+    document.getElementById("btnExport").addEventListener("click", () => {
+      const rows = [
+        ["Nom", "Prénom", "Téléphone", "Score", "Partie", "Timestamp"]
+      ];
+
+      currentData.liste.forEach(p => {
+        rows.push([
+          p.nom || "",
+          p.prenom || "",
+          p.telephone || "",
+          p.score || "",
+          p.partie || "",
+          p.timestamp ? new Date(p.timestamp).toISOString() : ""
+        ]);
+      });
+
+      let csvContent = rows.map(r => 
+        r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")
+      ).join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "paris_pelote.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+  </script>
+
+</body>
+</html>

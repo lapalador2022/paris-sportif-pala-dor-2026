@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Stats en direct</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #000;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h1 {
+      font-size: 36px;
+      margin-bottom: 10px;
+      color: #ff7b00;
+    }
+
+    #partie {
+      font-size: 24px;
+      margin-bottom: 10px;
+      opacity: 0.9;
+    }
+
+    #timer {
+      font-size: 22px;
+      margin-bottom: 30px;
+      color: #ff7b00;
+    }
+
+    .scores {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .box {
+      background: #111;
+      padding: 25px;
+      border-radius: 12px;
+      font-size: 28px;
+      border: 2px solid #333;
+      color: white;
+    }
+
+    .count {
+      font-size: 48px;
+      font-weight: bold;
+      margin-top: 10px;
+      color: #ff7b00;
+      transition: transform 0.2s ease, color 0.2s ease;
+    }
+
+    /* Animation score */
+    .pulse {
+      transform: scale(1.35);
+      color: #ff9500 !important;
+    }
+
+    #qr {
+      margin-top: 40px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>PARIS EN DIRECT</h1>
+
+  <!-- Partie -->
+  <div id="partie">
+    <strong>Partie en cours :</strong> <span id="nomPartie">Chargement...</span>
+  </div>
+
+  <!-- TIMER -->
+  <div id="timer">Fermeture dans : --</div>
+
+  <!-- Scores -->
+  <div class="scores">
+    <div class="box">3-0<div class="count" id="s30">0</div></div>
+    <div class="box">3-1<div class="count" id="s31">0</div></div>
+    <div class="box">3-2<div class="count" id="s32">0</div></div>
+    <div class="box">0-3<div class="count" id="s03">0</div></div>
+    <div class="box">1-3<div class="count" id="s13">0</div></div>
+    <div class="box">2-3<div class="count" id="s23">0</div></div>
+  </div>
+
+  <!-- QR Code -->
+  <div id="qr">
+    <img src="qr.png" width="200">
+    <p>Scannez pour parier</p>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, onSnapshot } 
+      from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyChlD3Lx2CBTWl88Tjbz-693f_s6jA4eys",
+      authDomain: "paris-pala-d-or.firebaseapp.com",
+      projectId: "paris-pala-d-or",
+      storageBucket: "paris-pala-d-or.firebasestorage.app",
+      messagingSenderId: "673652668583",
+      appId: "1:673652668583:web:94d8879777b53561b78382",
+      measurementId: "G-PYN7V7XVWC"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const docRef = doc(db, "paris", "participants");
+
+    let timerInterval = null;
+    let lastStats = {
+      "3-0": 0, "3-1": 0, "3-2": 0,
+      "0-3": 0, "1-3": 0, "2-3": 0
+    };
+
+    onSnapshot(docRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+
+      const data = docSnap.data();
+      const liste = data.liste || [];
+
+      // Nom de la partie
+      document.getElementById("nomPartie").innerText =
+        data.partieCourante || "Non définie";
+
+      // Compteurs
+      const stats = {
+        "3-0": 0,
+        "3-1": 0,
+        "3-2": 0,
+        "0-3": 0,
+        "1-3": 0,
+        "2-3": 0
+      };
+
+      liste.forEach(p => {
+        if (stats[p.score] !== undefined) stats[p.score]++;
+      });
+
+      // Mise à jour + animation
+      for (const score in stats) {
+        const el = document.getElementById("s" + score.replace("-", ""));
+        if (stats[score] !== lastStats[score]) {
+          el.innerText = stats[score];
+
+          // Animation pulse
+          el.classList.add("pulse");
+          setTimeout(() => el.classList.remove("pulse"), 250);
+        }
+      }
+
+      lastStats = stats;
+
+      // TIMER
+      if (timerInterval) clearInterval(timerInterval);
+
+      if (data.parisOuverts && data.fermetureTimestamp) {
+        function updateTimer() {
+          const diff = data.fermetureTimestamp - Date.now();
+          if (diff <= 0) {
+            document.getElementById("timer").innerText = "Paris fermés";
+            return;
+          }
+          const m = Math.floor(diff / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          document.getElementById("timer").innerText =
+            `Fermeture dans : ${m}m ${s}s`;
+        }
+
+        updateTimer();
+        timerInterval = setInterval(updateTimer, 1000);
+      } else {
+        document.getElementById("timer").innerText = "Paris fermés";
+      }
+    });
+  </script>
+
+</body>
+</html>

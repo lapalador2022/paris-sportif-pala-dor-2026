@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Pari Pelote</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+    }
+    h2 { text-align: center; }
+    label { font-weight: bold; margin-top: 10px; display: block; }
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    button {
+      background: #008CFF;
+      color: white;
+      border: none;
+      margin-top: 20px;
+      cursor: pointer;
+    }
+    button:hover { background: #006FCC; }
+    .success {
+      background: #d4ffd4;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 20px;
+      border: 1px solid #8fda8f;
+      display: none;
+    }
+    .closed {
+      background: #ffd4d4;
+      border: 1px solid #ff8f8f;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 20px;
+      display: none;
+      text-align: center;
+      font-weight: bold;
+    }
+    #timerPublic {
+      text-align:center;
+      font-size:18px;
+      margin:10px 0;
+      font-weight:bold;
+      color:#444;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Pariez sur la partie</h2>
+
+  <label>Nom de la partie</label>
+  <input type="text" id="partie" readonly>
+
+  <!-- TIMER PUBLIC -->
+  <div id="timerPublic">Fermeture dans : --</div>
+
+  <div id="closedMsg" class="closed">
+    Les paris sont fermés.
+  </div>
+
+  <label>Nom</label>
+  <input type="text" id="nom">
+
+  <label>Prénom</label>
+  <input type="text" id="prenom">
+
+  <label>Téléphone</label>
+  <input type="text" id="telephone">
+
+  <label>Score exact</label>
+  <select id="score">
+    <option value="3-0">3-0</option>
+    <option value="3-1">3-1</option>
+    <option value="3-2">3-2</option>
+    <option value="0-3">0-3</option>
+    <option value="1-3">1-3</option>
+    <option value="2-3">2-3</option>
+  </select>
+
+  <!-- IMPORTANT : PAS DE onclick -->
+  <button id="btnValider">Valider mon pari</button>
+
+  <div class="success" id="successMsg">
+    Pari enregistré ! Bonne chance 🍀
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, updateDoc, arrayUnion, getDoc, onSnapshot } 
+      from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyChlD3Lx2CBTWl88Tjbz-693f_s6jA4eys",
+      authDomain: "paris-pala-d-or.firebaseapp.com",
+      projectId: "paris-pala-d-or",
+      storageBucket: "paris-pala-d-or.firebasestorage.app",
+      messagingSenderId: "673652668583",
+      appId: "1:673652668583:web:94d8879777b53561b78382",
+      measurementId: "G-PYN7V7XVWC"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const docRef = doc(db, "paris", "participants");
+
+    let timerInterval = null;
+
+    // 🔥 Mise à jour automatique du nom de la partie + statut paris + timer
+    onSnapshot(docRef, (snap) => {
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+
+      // Nom de la partie
+      document.getElementById("partie").value = data.partieCourante || "Non définie";
+
+      // Paris ouverts / fermés
+      if (data.parisOuverts === false) {
+        document.getElementById("closedMsg").style.display = "block";
+        document.getElementById("btnValider").disabled = true;
+      } else {
+        document.getElementById("closedMsg").style.display = "none";
+        document.getElementById("btnValider").disabled = false;
+      }
+
+      // TIMER
+      if (timerInterval) clearInterval(timerInterval);
+
+      if (data.parisOuverts && data.fermetureTimestamp) {
+        function updateTimerPublic() {
+          const diff = data.fermetureTimestamp - Date.now();
+          if (diff <= 0) {
+            document.getElementById("timerPublic").innerText = "Paris fermés";
+            document.getElementById("btnValider").disabled = true;
+            return;
+          }
+          const m = Math.floor(diff / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          document.getElementById("timerPublic").innerText =
+            `Fermeture dans : ${m}m ${s}s`;
+        }
+
+        updateTimerPublic();
+        timerInterval = setInterval(updateTimerPublic, 1000);
+      } else {
+        document.getElementById("timerPublic").innerText = "Paris fermés";
+        document.getElementById("btnValider").disabled = true;
+      }
+    });
+
+    // 🔥 Envoi du pari
+    async function envoyerPari() {
+      console.log("clic sur Valider mon pari"); // debug
+
+      const nom = document.getElementById("nom").value.trim();
+      const prenom = document.getElementById("prenom").value.trim();
+      const telephone = document.getElementById("telephone").value.trim();
+      const score = document.getElementById("score").value;
+      const partie = document.getElementById("partie").value.trim();
+
+      if (!nom || !prenom || !telephone) {
+        alert("Merci de remplir tous les champs.");
+        return;
+      }
+
+      const snap = await getDoc(docRef);
+      if (!snap.exists()) {
+        await setDoc(docRef, { liste: [] });
+      }
+
+      const data = snap.data();
+      if (data.parisOuverts === false) {
+        alert("Les paris sont fermés.");
+        return;
+      }
+
+      await updateDoc(docRef, {
+        liste: arrayUnion({
+          nom,
+          prenom,
+          telephone,
+          score,
+          partie,
+          timestamp: Date.now()
+        })
+      });
+
+      document.getElementById("successMsg").style.display = "block";
+      setTimeout(() => {
+        document.getElementById("successMsg").style.display = "none";
+      }, 3000);
+
+      document.getElementById("nom").value = "";
+      document.getElementById("prenom").value = "";
+      document.getElementById("telephone").value = "";
+    }
+
+    // 🔥 On attend que le DOM soit prêt, puis on branche le bouton
+    window.addEventListener("DOMContentLoaded", () => {
+      const btn = document.getElementById("btnValider");
+      console.log("btnValider trouvé ?", !!btn); // debug
+      if (btn) {
+        btn.addEventListener("click", envoyerPari);
+      }
+    });
+  </script>
+
+</body>
+</html>
