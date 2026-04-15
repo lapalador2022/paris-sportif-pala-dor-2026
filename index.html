@@ -56,6 +56,12 @@
       font-weight:bold;
       color:#444;
     }
+    #lotPublic {
+      text-align:center;
+      font-size:18px;
+      margin:10px 0;
+      color:#ff7b00;
+    }
   </style>
 </head>
 
@@ -65,6 +71,9 @@
 
   <label>Nom de la partie</label>
   <input type="text" id="partie" readonly>
+
+  <!-- LOT -->
+  <div id="lotPublic">Lot à gagner : --</div>
 
   <!-- TIMER PUBLIC -->
   <div id="timerPublic">Fermeture dans : --</div>
@@ -92,7 +101,6 @@
     <option value="2-3">2-3</option>
   </select>
 
-  <!-- IMPORTANT : PAS DE onclick -->
   <button id="btnValider">Valider mon pari</button>
 
   <div class="success" id="successMsg">
@@ -121,14 +129,18 @@
 
     let timerInterval = null;
 
-    // 🔥 Mise à jour automatique du nom de la partie + statut paris + timer
+    // 🔥 Mise à jour automatique du nom de la partie + lot + statut paris + timer
     onSnapshot(docRef, (snap) => {
       if (!snap.exists()) return;
 
       const data = snap.data();
 
-      // Nom de la partie
+      // Partie
       document.getElementById("partie").value = data.partieCourante || "Non définie";
+
+      // Lot
+      document.getElementById("lotPublic").innerText =
+        "Lot à gagner : " + (data.lot || "Non défini");
 
       // Paris ouverts / fermés
       if (data.parisOuverts === false) {
@@ -164,9 +176,9 @@
       }
     });
 
-    // 🔥 Envoi du pari
+    // 🔥 Envoi du pari avec anti-doublon par partie
     async function envoyerPari() {
-      console.log("clic sur Valider mon pari"); // debug
+      console.log("clic sur Valider mon pari");
 
       const nom = document.getElementById("nom").value.trim();
       const prenom = document.getElementById("prenom").value.trim();
@@ -179,17 +191,29 @@
         return;
       }
 
-      const snap = await getDoc(docRef);
-      if (!snap.exists()) {
-        await setDoc(docRef, { liste: [] });
+      // 🔥 Vérifier si ce numéro a déjà parié sur cette partie
+      const snapCheck = await getDoc(docRef);
+      const dataCheck = snapCheck.data();
+      const listeCheck = dataCheck.liste || [];
+
+      const dejaParie = listeCheck.some(p =>
+        p.telephone === telephone && p.partie === partie
+      );
+
+      if (dejaParie) {
+        alert("Vous avez déjà parié sur cette partie.");
+        return;
       }
 
+      // Vérifier si les paris sont ouverts
+      const snap = await getDoc(docRef);
       const data = snap.data();
       if (data.parisOuverts === false) {
         alert("Les paris sont fermés.");
         return;
       }
 
+      // Enregistrer le pari
       await updateDoc(docRef, {
         liste: arrayUnion({
           nom,
@@ -214,7 +238,6 @@
     // 🔥 On attend que le DOM soit prêt, puis on branche le bouton
     window.addEventListener("DOMContentLoaded", () => {
       const btn = document.getElementById("btnValider");
-      console.log("btnValider trouvé ?", !!btn); // debug
       if (btn) {
         btn.addEventListener("click", envoyerPari);
       }
