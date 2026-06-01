@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Paris Pelote</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      max-width: 700px;
+      margin: auto;
+    }
+    h2 { text-align: center; }
+    label { font-weight: bold; margin-top: 15px; display: block; }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    button {
+      background: #ff7b00;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover { background: #e56f00; }
+    .section {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      border: 1px solid #ddd;
+    }
+    table th, table td {
+      padding: 8px;
+      border: 1px solid #ccc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Admin – Paris Pelote</h2>
+
+  <!-- État -->
+  <div class="section">
+    <h3>État des paris</h3>
+    <p>Partie actuelle : <strong id="partieActuelle">Chargement...</strong></p>
+    <p>Lot : <strong id="lotActuel">Chargement...</strong></p>
+    <p>Statut : <strong id="statutParis">Chargement...</strong></p>
+    <p>Fermeture dans : <strong id="timerAdmin">--</strong></p>
+  </div>
+
+  <!-- Gestion partie -->
+  <div class="section">
+    <h3>Gestion de la partie</h3>
+
+    <label>Nom de la partie</label>
+    <input type="text" id="partieInput" placeholder="Ex: NECOL/BREFFEL - MOURA/MOURA">
+
+    <button id="btnMajPartie">Mettre à jour la partie</button>
+
+    <button id="btnNouvellePartie" style="background:#444;">Nouvelle partie (vider les paris)</button>
+  </div>
+
+  <!-- Lot -->
+  <div class="section">
+    <h3>Lot à gagner</h3>
+
+    <label>Lot</label>
+    <input type="text" id="lotInput" placeholder="Ex: Panier garni">
+
+    <button id="btnMajLot">Mettre à jour le lot</button>
+  </div>
+
+  <!-- Timer -->
+  <div class="section">
+    <h3>Timer & ouverture</h3>
+
+    <label>Durée avant fermeture (minutes)</label>
+    <input type="number" id="duree" value="20">
+
+    <button id="btnStartTimer">Démarrer le timer & ouvrir les paris</button>
+    <button id="btnFermerParis" style="background:#c40000;">Fermer les paris maintenant</button>
+  </div>
+
+  <!-- Export CSV -->
+  <div class="section">
+    <h3>Export des paris</h3>
+    <button id="btnExportCSV" style="background:#0077cc;">Exporter en CSV</button>
+  </div>
+
+  <!-- Liste des paris -->
+  <div class="section">
+    <h3>Liste des paris en direct</h3>
+
+    <table>
+      <thead>
+        <tr style="background:#eee;">
+          <th>Nom</th>
+          <th>Prénom</th>
+          <th>Téléphone</th>
+          <th>Score</th>
+          <th>Partie</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyParis"></tbody>
+    </table>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, updateDoc, setDoc, onSnapshot, getDoc } 
+      from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD77OYOybs3t8XiKnsiEsGdLEkUl4DrfvI",
+      authDomain: "paris-pala-d-or-2026.firebaseapp.com",
+      projectId: "paris-pala-d-or-2026",
+      storageBucket: "paris-pala-d-or-2026.firebasestorage.app",
+      messagingSenderId: "711498857592",
+      appId: "1:711498857592:web:c7bdbd28d1ab7ada26418d"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const ref = doc(db, "paris", "participants");
+
+    let timerInterval = null;
+
+    // 🔥 Mise à jour en direct de l'état admin + liste
+    onSnapshot(ref, (snap) => {
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+
+      document.getElementById("partieActuelle").innerText = data.partieCourante || "Non définie";
+      document.getElementById("lotActuel").innerText = data.lot || "Non défini";
+      document.getElementById("statutParis").innerText = data.parisOuverts ? "Ouverts" : "Fermés";
+
+      // Timer admin
+      if (timerInterval) clearInterval(timerInterval);
+
+      if (data.parisOuverts && data.fermetureTimestamp) {
+        function updateTimer() {
+          const diff = data.fermetureTimestamp - Date.now();
+          if (diff <= 0) {
+            document.getElementById("timerAdmin").innerText = "Terminé";
+            return;
+          }
+          const m = Math.floor(diff / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          document.getElementById("timerAdmin").innerText = `${m}m ${s}s`;
+        }
+        updateTimer();
+        timerInterval = setInterval(updateTimer, 1000);
+      } else {
+        document.getElementById("timerAdmin").innerText = "--";
+      }
+
+      // 🔥 LISTE DES PARIS EN DIRECT
+      const tbody = document.getElementById("tbodyParis");
+      tbody.innerHTML = "";
+
+      const liste = data.liste || [];
+
+      liste
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .forEach(p => {
+          const tr = document.createElement("tr");
+
+          tr.innerHTML = `
+            <td>${p.nom}</td>
+            <td>${p.prenom}</td>
+            <td>${p.telephone}</td>
+            <td>${p.score}</td>
+            <td>${p.partie}</td>
+            <td>${new Date(p.timestamp).toLocaleString("fr-FR")}</td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+    });
+
+    // 🔥 Mettre à jour la partie
+    document.getElementById("btnMajPartie").addEventListener("click", async () => {
+      const partie = document.getElementById("partieInput").value.trim();
+      if (!partie) return alert("Nom de partie vide");
+
+      await updateDoc(ref, { partieCourante: partie });
+      alert("Partie mise à jour !");
+    });
+
+    // 🔥 Mettre à jour le lot
+    document.getElementById("btnMajLot").addEventListener("click", async () => {
+      const lot = document.getElementById("lotInput").value.trim();
+      if (!lot) return alert("Lot vide");
+
+      await updateDoc(ref, { lot: lot });
+      alert("Lot mis à jour !");
+    });
+
+    // 🔥 Nouvelle partie (vider les paris)
+    document.getElementById("btnNouvellePartie").addEventListener("click", async () => {
+      await updateDoc(ref, { liste: [] });
+      alert("Nouvelle partie créée, paris vidés !");
+    });
+
+    // 🔥 Démarrer timer + ouvrir paris
+    document.getElementById("btnStartTimer").addEventListener("click", async () => {
+      const minutes = parseInt(document.getElementById("duree").value);
+      const fermeture = Date.now() + minutes * 60000;
+
+      await updateDoc(ref, {
+        parisOuverts: true,
+        fermetureTimestamp: fermeture
+      });
+
+      alert("Timer lancé, paris ouverts !");
+    });
+
+    // 🔥 Fermer les paris
+    document.getElementById("btnFermerParis").addEventListener("click", async () => {
+      await updateDoc(ref, { parisOuverts: false });
+      alert("Paris fermés !");
+    });
+
+    // 🔥 EXPORT CSV
+    document.getElementById("btnExportCSV").addEventListener("click", async () => {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return alert("Aucun pari trouvé");
+
+      const data = snap.data();
+      const liste = data.liste || [];
+
+      if (liste.length === 0) return alert("Aucun pari à exporter");
+
+      let csv = "Nom,Prénom,Téléphone,Score,Partie,Date\n";
+
+      liste.forEach(p => {
+        const date = new Date(p.timestamp).toLocaleString("fr-FR");
+        csv += `${p.nom},${p.prenom},${p.telephone},${p.score},${p.partie},${date}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "paris.csv";
+      a.click();
+
+      URL.revokeObjectURL(url);
+    });
+
+  </script>
+
+</body>
+</html>
