@@ -73,6 +73,11 @@
       color: #FF9900;
       font-weight: bold;
     }
+
+    .btn-grey {
+      background: #444;
+      color: white;
+    }
   </style>
 </head>
 
@@ -92,7 +97,7 @@
     <input type="text" id="partieInput" placeholder="Ex: Finale A vs B">
 
     <button id="btnMajPartie">Mettre à jour la partie</button>
-    <button id="btnNouvellePartie" style="background:#444;color:white;">Nouvelle partie (vider les paris)</button>
+    <button id="btnNouvellePartie" class="btn-grey">Nouvelle partie (vider les paris)</button>
   </div>
 
   <h2>Lot à gagner</h2>
@@ -113,10 +118,15 @@
     <button id="btnFermer">Démarrer le timer & fermer automatiquement</button>
   </div>
 
+  <h2>Export des paris</h2>
+  <div class="section">
+    <button id="btnExportCSV">Exporter en CSV</button>
+  </div>
+
   <!-- Firebase -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, updateDoc, setDoc, onSnapshot } 
+    import { getFirestore, doc, updateDoc, setDoc, getDoc, onSnapshot } 
       from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -202,6 +212,39 @@
       });
 
       alert("Timer lancé !");
+    };
+
+    /* -------------------------
+       EXPORT CSV
+    --------------------------*/
+    document.getElementById("btnExportCSV").onclick = async () => {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return alert("Aucune donnée.");
+
+      const data = snap.data();
+      const liste = data.liste || [];
+
+      if (liste.length === 0) {
+        alert("Aucun pari à exporter.");
+        return;
+      }
+
+      let csv = "Nom;Prénom;Téléphone;Score;Partie;Date\n";
+
+      liste.forEach(p => {
+        const date = new Date(p.timestamp).toLocaleString("fr-FR");
+        csv += `${p.nom};${p.prenom};${p.telephone};${p.score};${p.partie};${date}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "paris_pelote.csv";
+      a.click();
+
+      URL.revokeObjectURL(url);
     };
   </script>
 
