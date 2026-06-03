@@ -8,132 +8,124 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f5f5f5;
+      background: #0D0D0D;
+      color: #FFFFFF;
       padding: 20px;
       max-width: 700px;
       margin: auto;
     }
-    h2 { text-align: center; }
-    label { font-weight: bold; margin-top: 15px; display: block; }
-    input, button {
+
+    h2 {
+      color: #FF9900;
+      margin-top: 30px;
+      margin-bottom: 10px;
+    }
+
+    .section {
+      background: #1A1A1A;
+      border: 1px solid #333;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+
+    label {
+      font-weight: bold;
+      margin-top: 10px;
+      display: block;
+      color: #FF9900;
+    }
+
+    input {
       width: 100%;
       padding: 12px;
       margin-top: 5px;
       border-radius: 6px;
-      border: 1px solid #ccc;
+      border: 1px solid #444;
+      background: #0D0D0D;
+      color: white;
       font-size: 16px;
     }
+
     button {
-      background: #ff7b00;
-      color: white;
-      border: none;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    button:hover { background: #e56f00; }
-    .section {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      margin-top: 20px;
-      border: 1px solid #ddd;
-    }
-    table th, table td {
-      padding: 8px;
-      border: 1px solid #ccc;
-    }
-    table {
       width: 100%;
-      border-collapse: collapse;
+      padding: 12px;
       margin-top: 15px;
+      border-radius: 6px;
+      border: none;
+      background: #FF9900;
+      color: #000;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #e68a00;
+    }
+
+    .status-line {
+      margin: 5px 0;
+      font-size: 16px;
+    }
+
+    .status-value {
+      color: #FF9900;
+      font-weight: bold;
     }
   </style>
 </head>
 
 <body>
 
-  <h2>Admin – Paris Pelote</h2>
-
-  <!-- État -->
+  <h2>État des paris</h2>
   <div class="section">
-    <h3>État des paris</h3>
-    <p>Partie actuelle : <strong id="partieActuelle">Chargement...</strong></p>
-    <p>Lot : <strong id="lotActuel">Chargement...</strong></p>
-    <p>Statut : <strong id="statutParis">Chargement...</strong></p>
-    <p>Fermeture dans : <strong id="timerAdmin">--</strong></p>
+    <div class="status-line">Partie actuelle : <span id="etatPartie" class="status-value">Chargement...</span></div>
+    <div class="status-line">Lot : <span id="etatLot" class="status-value">Chargement...</span></div>
+    <div class="status-line">Statut : <span id="etatStatut" class="status-value">Chargement...</span></div>
+    <div class="status-line">Fermeture dans : <span id="etatTimer" class="status-value">--</span></div>
   </div>
 
-  <!-- Gestion partie -->
+  <h2>Gestion de la partie</h2>
   <div class="section">
-    <h3>Gestion de la partie</h3>
-
     <label>Nom de la partie</label>
-    <input type="text" id="partieInput" placeholder="Ex: NECOL/BREFFEL - MOURA/MOURA">
+    <input type="text" id="partieInput" placeholder="Ex: Finale A vs B">
 
     <button id="btnMajPartie">Mettre à jour la partie</button>
-
-    <button id="btnNouvellePartie" style="background:#444;">Nouvelle partie (vider les paris)</button>
+    <button id="btnNouvellePartie" style="background:#444;color:white;">Nouvelle partie (vider les paris)</button>
   </div>
 
-  <!-- Lot -->
+  <h2>Lot à gagner</h2>
   <div class="section">
-    <h3>Lot à gagner</h3>
-
     <label>Lot</label>
     <input type="text" id="lotInput" placeholder="Ex: Panier garni">
 
     <button id="btnMajLot">Mettre à jour le lot</button>
   </div>
 
-  <!-- Timer -->
+  <h2>Timer & ouverture</h2>
   <div class="section">
-    <h3>Timer & ouverture</h3>
+    <button id="btnOuvrir">Ouvrir les paris</button>
 
     <label>Durée avant fermeture (minutes)</label>
-    <input type="number" id="duree" value="20">
+    <input type="number" id="dureeInput" value="5">
 
-    <button id="btnStartTimer">Démarrer le timer & ouvrir les paris</button>
-    <button id="btnFermerParis" style="background:#c40000;">Fermer les paris maintenant</button>
-  </div>
-
-  <!-- Export CSV -->
-  <div class="section">
-    <h3>Export des paris</h3>
-    <button id="btnExportCSV" style="background:#0077cc;">Exporter en CSV</button>
-  </div>
-
-  <!-- Liste des paris -->
-  <div class="section">
-    <h3>Liste des paris en direct</h3>
-
-    <table>
-      <thead>
-        <tr style="background:#eee;">
-          <th>Nom</th>
-          <th>Prénom</th>
-          <th>Téléphone</th>
-          <th>Score</th>
-          <th>Partie</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody id="tbodyParis"></tbody>
-    </table>
+    <button id="btnFermer">Démarrer le timer & fermer automatiquement</button>
   </div>
 
   <!-- Firebase -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, updateDoc, setDoc, onSnapshot, getDoc } 
+    import { getFirestore, doc, updateDoc, setDoc, onSnapshot } 
       from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyD77OYOybs3t8XiKnsiEsGdLEkUl4DrfvI",
+      apiKey: "AIzaSyD7OYOYbs3t8XiKnsiEsGdLEkUl4DfrvI",
       authDomain: "paris-pala-d-or-2026.firebaseapp.com",
       projectId: "paris-pala-d-or-2026",
       storageBucket: "paris-pala-d-or-2026.firebasestorage.app",
       messagingSenderId: "711498857592",
-      appId: "1:711498857592:web:c7bdbd28d1ab7ada26418d"
+      appId: "1:711498857592:web:c7dbbd28d1ab7ada26418d"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -142,87 +134,66 @@
 
     let timerInterval = null;
 
-    // 🔥 Mise à jour en direct de l'état admin + liste
     onSnapshot(ref, (snap) => {
       if (!snap.exists()) return;
-
       const data = snap.data();
 
-      document.getElementById("partieActuelle").innerText = data.partieCourante || "Non définie";
-      document.getElementById("lotActuel").innerText = data.lot || "Non défini";
-      document.getElementById("statutParis").innerText = data.parisOuverts ? "Ouverts" : "Fermés";
+      document.getElementById("etatPartie").innerText = data.partieCourante || "--";
+      document.getElementById("etatLot").innerText = data.lot || "--";
+      document.getElementById("etatStatut").innerText = data.parisOuverts ? "OUVERTS" : "FERMÉS";
 
-      // Timer admin
       if (timerInterval) clearInterval(timerInterval);
 
       if (data.parisOuverts && data.fermetureTimestamp) {
         function updateTimer() {
           const diff = data.fermetureTimestamp - Date.now();
           if (diff <= 0) {
-            document.getElementById("timerAdmin").innerText = "Terminé";
+            document.getElementById("etatTimer").innerText = "0m 0s";
             return;
           }
           const m = Math.floor(diff / 60000);
           const s = Math.floor((diff % 60000) / 1000);
-          document.getElementById("timerAdmin").innerText = `${m}m ${s}s`;
+          document.getElementById("etatTimer").innerText = `${m}m ${s}s`;
         }
         updateTimer();
         timerInterval = setInterval(updateTimer, 1000);
       } else {
-        document.getElementById("timerAdmin").innerText = "--";
+        document.getElementById("etatTimer").innerText = "--";
       }
-
-      // 🔥 LISTE DES PARIS EN DIRECT
-      const tbody = document.getElementById("tbodyParis");
-      tbody.innerHTML = "";
-
-      const liste = data.liste || [];
-
-      liste
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .forEach(p => {
-          const tr = document.createElement("tr");
-
-          tr.innerHTML = `
-            <td>${p.nom}</td>
-            <td>${p.prenom}</td>
-            <td>${p.telephone}</td>
-            <td>${p.score}</td>
-            <td>${p.partie}</td>
-            <td>${new Date(p.timestamp).toLocaleString("fr-FR")}</td>
-          `;
-
-          tbody.appendChild(tr);
-        });
     });
 
-    // 🔥 Mettre à jour la partie
-    document.getElementById("btnMajPartie").addEventListener("click", async () => {
+    document.getElementById("btnMajPartie").onclick = async () => {
       const partie = document.getElementById("partieInput").value.trim();
-      if (!partie) return alert("Nom de partie vide");
-
+      if (!partie) return alert("Nom de partie vide.");
       await updateDoc(ref, { partieCourante: partie });
-      alert("Partie mise à jour !");
-    });
+      alert("Partie mise à jour.");
+    };
 
-    // 🔥 Mettre à jour le lot
-    document.getElementById("btnMajLot").addEventListener("click", async () => {
+    document.getElementById("btnNouvellePartie").onclick = async () => {
+      await updateDoc(ref, {
+        liste: [],
+        partieCourante: "",
+        lot: "",
+        parisOuverts: false,
+        fermetureTimestamp: 0
+      });
+      alert("Nouvelle partie créée.");
+    };
+
+    document.getElementById("btnMajLot").onclick = async () => {
       const lot = document.getElementById("lotInput").value.trim();
-      if (!lot) return alert("Lot vide");
+      if (!lot) return alert("Lot vide.");
+      await updateDoc(ref, { lot });
+      alert("Lot mis à jour.");
+    };
 
-      await updateDoc(ref, { lot: lot });
-      alert("Lot mis à jour !");
-    });
+    document.getElementById("btnOuvrir").onclick = async () => {
+      await updateDoc(ref, { parisOuverts: true });
+      alert("Paris ouverts !");
+    };
 
-    // 🔥 Nouvelle partie (vider les paris)
-    document.getElementById("btnNouvellePartie").addEventListener("click", async () => {
-      await updateDoc(ref, { liste: [] });
-      alert("Nouvelle partie créée, paris vidés !");
-    });
-
-    // 🔥 Démarrer timer + ouvrir paris
-    document.getElementById("btnStartTimer").addEventListener("click", async () => {
-      const minutes = parseInt(document.getElementById("duree").value);
+    document.getElementById("btnFermer").onclick = async () => {
+      const minutes = parseInt(document.getElementById("dureeInput").value);
       const fermeture = Date.now() + minutes * 60000;
 
       await updateDoc(ref, {
@@ -230,43 +201,8 @@
         fermetureTimestamp: fermeture
       });
 
-      alert("Timer lancé, paris ouverts !");
-    });
-
-    // 🔥 Fermer les paris
-    document.getElementById("btnFermerParis").addEventListener("click", async () => {
-      await updateDoc(ref, { parisOuverts: false });
-      alert("Paris fermés !");
-    });
-
-    // 🔥 EXPORT CSV
-    document.getElementById("btnExportCSV").addEventListener("click", async () => {
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return alert("Aucun pari trouvé");
-
-      const data = snap.data();
-      const liste = data.liste || [];
-
-      if (liste.length === 0) return alert("Aucun pari à exporter");
-
-      let csv = "Nom,Prénom,Téléphone,Score,Partie,Date\n";
-
-      liste.forEach(p => {
-        const date = new Date(p.timestamp).toLocaleString("fr-FR");
-        csv += `${p.nom},${p.prenom},${p.telephone},${p.score},${p.partie},${date}\n`;
-      });
-
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "paris.csv";
-      a.click();
-
-      URL.revokeObjectURL(url);
-    });
-
+      alert("Timer lancé !");
+    };
   </script>
 
 </body>
