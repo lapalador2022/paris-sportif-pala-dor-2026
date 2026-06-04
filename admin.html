@@ -15,7 +15,7 @@
       margin: auto;
     }
 
-    h2 {
+    h2, h3 {
       color: #FF9900;
       margin-top: 30px;
       margin-bottom: 10px;
@@ -64,6 +64,11 @@
       background: #e68a00;
     }
 
+    .btn-grey {
+      background: #444;
+      color: white;
+    }
+
     .status-line {
       margin: 5px 0;
       font-size: 16px;
@@ -72,11 +77,6 @@
     .status-value {
       color: #FF9900;
       font-weight: bold;
-    }
-
-    .btn-grey {
-      background: #444;
-      color: white;
     }
   </style>
 </head>
@@ -116,11 +116,18 @@
     <input type="number" id="dureeInput" value="5">
 
     <button id="btnFermer">Démarrer le timer & fermer automatiquement</button>
+
+    <button id="btnFermerMaintenant" class="btn-grey">Fermer les paris maintenant</button>
   </div>
 
   <h2>Export des paris</h2>
   <div class="section">
     <button id="btnExportCSV">Exporter en CSV</button>
+  </div>
+
+  <h2>Liste des parieurs</h2>
+  <div id="listeParieurs" class="section">
+    <div id="contenuListe">Chargement...</div>
   </div>
 
   <!-- Firebase -->
@@ -144,6 +151,9 @@
 
     let timerInterval = null;
 
+    /* -------------------------
+       MISE À JOUR EN DIRECT
+    --------------------------*/
     onSnapshot(ref, (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
@@ -152,6 +162,7 @@
       document.getElementById("etatLot").innerText = data.lot || "--";
       document.getElementById("etatStatut").innerText = data.parisOuverts ? "OUVERTS" : "FERMÉS";
 
+      /* TIMER */
       if (timerInterval) clearInterval(timerInterval);
 
       if (data.parisOuverts && data.fermetureTimestamp) {
@@ -170,7 +181,28 @@
       } else {
         document.getElementById("etatTimer").innerText = "--";
       }
+
+      /* LISTE DES PARIEURS */
+      const liste = data.liste || [];
+      const div = document.getElementById("contenuListe");
+
+      if (liste.length === 0) {
+        div.innerHTML = "<i>Aucun pari pour le moment.</i>";
+        return;
+      }
+
+      let html = "<ul style='padding-left:15px;'>";
+      liste.forEach(p => {
+        html += `<li>${p.prenom} ${p.nom} — ${p.score} (${p.telephone})</li>`;
+      });
+      html += "</ul>";
+
+      div.innerHTML = html;
     });
+
+    /* -------------------------
+       ACTIONS ADMIN
+    --------------------------*/
 
     document.getElementById("btnMajPartie").onclick = async () => {
       const partie = document.getElementById("partieInput").value.trim();
@@ -212,6 +244,17 @@
       });
 
       alert("Timer lancé !");
+    };
+
+    /* -------------------------
+       FERMETURE IMMÉDIATE
+    --------------------------*/
+    document.getElementById("btnFermerMaintenant").onclick = async () => {
+      await updateDoc(ref, {
+        parisOuverts: false,
+        fermetureTimestamp: 0
+      });
+      alert("Paris fermés immédiatement.");
     };
 
     /* -------------------------
